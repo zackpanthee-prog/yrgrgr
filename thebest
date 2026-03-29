@@ -1,7 +1,7 @@
 --[[
     ╔══════════════════════════════════════════════════════════╗
     ║          SNOWY HUB — PREMIUM KEY SYSTEM UI v2.0          ║
-    ║     Jnkie-Compatible (Inline UI) — Ultimate Edition      ║
+    ║         GitHub Key System — Ultimate Edition              ║
     ╚══════════════════════════════════════════════════════════╝
     
     Features:
@@ -15,8 +15,8 @@
     • Staggered spring entrance animations
     • Parallax cursor depth on all elements
     
-    Uses Junkie SDK: check_key() / get_key_link()
-    Sets getgenv().SCRIPT_KEY → triggers Original Code
+    Key validation via GitHub-hosted key lists
+    Sets getgenv().SCRIPT_KEY → loads Script Source
 ]]
 
 -- ══════════════════════════════════════════════════════════════
@@ -27,87 +27,65 @@ local UserInputService = game:GetService("UserInputService")
 local RunService      = game:GetService("RunService")
 local Players         = game:GetService("Players")
 local CoreGui         = game:GetService("CoreGui")
-local LocalPlayer     = Players.LocalPlayer
+local LocalPlayer     = Players.LocalPlayerwhat do i 
 
 -- ══════════════════════════════════════════════════════════════
--- JNKIE API (Direct HTTP — no SDK loadstring needed)
+-- KEY SYSTEM (GitHub-hosted key lists)
 -- ══════════════════════════════════════════════════════════════
--- Uses Jnkie's public REST API directly instead of loading their SDK
--- via loadstring. Loading the SDK caused Jnkie's built-in UI to
--- spawn and show "No script key provided, please pass a SCRIPT_KEY!"
--- because the SDK expects SCRIPT_KEY pre-set by their own loader.
---
--- By calling the API directly we avoid that conflict entirely and
--- let our custom UI handle everything.
+-- All keys are stored in GitHub text files that you control.
+-- Free keys: one key per line in freekeys.txt
+-- Premium keys: one key per line in premiumkeys.txt
+-- No external SDK or API needed.
 
-local HttpService = game:GetService("HttpService")
-local httpRequest = (syn and syn.request) or request or http_request or http.request
+local FREE_KEYS_URL = "https://raw.githubusercontent.com/zackpanthee-prog/yrgrgr/refs/heads/main/freekeys.txt"
+local PREMIUM_KEYS_URL = "https://raw.githubusercontent.com/zackpanthee-prog/yrgrgr/refs/heads/main/premiumkeys.txt"
+local SCRIPT_SOURCE_URL = "https://raw.githubusercontent.com/zackpanthee-prog/yrgrgr/refs/heads/main/scriptsource"
 
-local JNKIE_BASE_URL = "https://api.jnkie.com/api/v1/whitelist"
+-- Cached key sets (fetched once)
+local cachedFreeKeys = nil
+local cachedPremiumKeys = nil
 
--- Core Tier Config
-local FREE_PROJECT_ID = "19097"
-local PREMIUM_PROJECT_ID = "16550"
-local FREE_PROVIDERS = {"lootlabs", "workink"}
-
-local Junkie = {}
-Junkie.service    = "snowy hub"
-Junkie.identifier = FREE_PROJECT_ID
-Junkie.provider   = FREE_PROVIDERS[1]
-
-function Junkie.check_key(key)
-    if not Junkie.service then error("service not set") end
-    local ok, resp = pcall(function()
-        return httpRequest({
-            Method = "POST",
-            Url = JNKIE_BASE_URL .. "/verifyOpen",
-            Headers = {["Content-Type"] = "application/json"},
-            Body = HttpService:JSONEncode({
-                key = tostring(key or ""),
-                service = Junkie.service,
-                identifier = tostring(Junkie.identifier or "unknown")
-            })
-        })
+local function fetchKeyList(url)
+    local keys = {}
+    pcall(function()
+        local raw = game:HttpGet(url)
+        for line in raw:gmatch("[^\r\n]+") do
+            local trimmed = line:match("^%%s*(.-)%%s*$")
+            if #trimmed > 0 then
+                keys[trimmed:upper()] = true
+            end
+        end
     end)
-    if not ok or not resp then
-        return {valid = false, error = "HTTP_ERROR"}
-    end
-    if resp.StatusCode ~= 200 then
-        return {valid = false, error = "http " .. tostring(resp.StatusCode)}
-    end
-    local decodeOk, body = pcall(function() return HttpService:JSONDecode(resp.Body) end)
-    if not decodeOk then
-        return {valid = false, error = "DECODE_ERROR"}
-    end
-    return body
+    return keys
 end
 
-function Junkie.get_key_link(provider)
-    if not Junkie.service then error("service not set") end
-    if not Junkie.identifier then error("identifier not set") end
-    if not provider and not Junkie.provider then error("provider not set") end
-
-    local ok, resp = pcall(function()
-        return httpRequest({
-            Method = "POST",
-            Url = JNKIE_BASE_URL .. "/getKeyOpen",
-            Headers = {["Content-Type"] = "application/json"},
-            Body = HttpService:JSONEncode({
-                service = Junkie.service,
-                provider = tostring(provider or Junkie.provider),
-                identifier = tostring(Junkie.identifier)
-            })
-        })
-    end)
-    if not ok or not resp then return nil, "HTTP_ERROR" end
-    if resp.StatusCode == 429 then return nil, "RATE_LIMITED" end
-    if resp.StatusCode ~= 200 then return nil, resp.Body or "HTTP_ERROR" end
-    return resp.Body, nil
+local function getFreeKeys()
+    if cachedFreeKeys then return cachedFreeKeys end
+    cachedFreeKeys = fetchKeyList(FREE_KEYS_URL)
+    cachedFreeKeys["SNOWY-FREE-LAUNCH2024"] = true
+    cachedFreeKeys["SNOWY-FREE-DISCORD"] = true
+    cachedFreeKeys["SNOWY-FREE-TRIAL01"] = true
+    return cachedFreeKeys
 end
 
--- Helper that returns the SDK table (drop-in replacement for old getSDK)
-local function getSDK(key)
-    return Junkie
+local function getPremiumKeys()
+    if cachedPremiumKeys then return cachedPremiumKeys end
+    cachedPremiumKeys = fetchKeyList(PREMIUM_KEYS_URL)
+    return cachedPremiumKeys
+end
+
+task.spawn(getFreeKeys)
+task.spawn(getPremiumKeys)
+
+local function validateKey(key)
+    local k = key:upper()
+    if getFreeKeys()[k] then
+        return true, "free"
+    end
+    if getPremiumKeys()[k] then
+        return true, "premium"
+    end
+    return false, "none"
 end
 
 warn("[SnowyHub] UI Source starting...")
@@ -972,7 +950,7 @@ corner(secBadge, 5)
 local secText = Instance.new("TextLabel")
 secText.Size = UDim2.new(1, 0, 1, 0)
 secText.BackgroundTransparency = 1
-secText.Text = "🛡 Secured by Jnkie"
+secText.Text = "🛡 Secured by Snowy Hub"
 secText.TextColor3 = T.Success
 secText.TextSize = 9
 secText.Font = Enum.Font.GothamBold
@@ -1086,47 +1064,12 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     end
 end)
 
+
 -- ══════════════════════════════════════════════════════════
--- KEY TYPE DETECTION SYSTEM
--- Free keys: start with "SNOWY-FREE-" prefix
--- Premium keys: anything else (routed to Jnkie SDK)
+-- KEY TYPE DETECTION (visual badge only)
 -- ══════════════════════════════════════════════════════════
 local FREE_KEY_PREFIX = "SNOWY-FREE-"
-local FREE_KEYS_URL = "https://raw.githubusercontent.com/adubwon/nex/refs/heads/main/freekeys.txt"
 
--- Hardcoded fallback free keys (always work even if URL fails)
-local FALLBACK_FREE_KEYS = {
-    "SNOWY-FREE-LAUNCH2024",
-    "SNOWY-FREE-DISCORD",
-    "SNOWY-FREE-TRIAL01",
-}
-
--- Fetch free keys from remote (cached after first fetch)
-local cachedFreeKeys = nil
-local function getFreeKeys()
-    if cachedFreeKeys then return cachedFreeKeys end
-    cachedFreeKeys = {}
-    -- Add fallbacks first
-    for _, k in ipairs(FALLBACK_FREE_KEYS) do
-        cachedFreeKeys[k:upper()] = true
-    end
-    -- Try remote fetch
-    pcall(function()
-        local raw = game:HttpGet(FREE_KEYS_URL)
-        for line in raw:gmatch("[^\n]+") do
-            local trimmed = line:match("^%s*(.-)%s*$")
-            if #trimmed > 0 then
-                cachedFreeKeys[trimmed:upper()] = true
-            end
-        end
-    end)
-    return cachedFreeKeys
-end
-
--- Pre-fetch in background
-task.spawn(getFreeKeys)
-
--- Key type detector
 local function detectKeyType(text)
     if #text == 0 then return "none" end
     if text:upper():sub(1, #FREE_KEY_PREFIX) == FREE_KEY_PREFIX:upper() then
@@ -1209,7 +1152,7 @@ keyInput:GetPropertyChangedSignal("Text"):Connect(function()
         elseif kType == "premium" then
             keyTypeBadge.Visible = true
             keyTypeBadge.BackgroundColor3 = Color3.fromRGB(150, 100, 255)
-            keyTypeBadgeText.Text = "🔑  JNKIE KEY"
+            keyTypeBadgeText.Text = "👑  PREMIUM KEY"
             keyTypeBadge.Size = UDim2.new(0, 108, 0, 18)
             tween(keyTypeBadge, {BackgroundTransparency = 0.25}, 0.2)
             tween(inputStroke, {Color = Color3.fromRGB(150, 100, 255), Transparency = 0.1}, 0.2)
@@ -1693,7 +1636,7 @@ local rightClose = makeClose(rightPanel)
 makeSeparator(rightPanel, 40)
 
 local changelogs = {
-    {ver = "2.0.0", date = "Mar 25, 2026", items = {"Premium 3D UI design", "Jnkie SDK integration", "Snow particle effects", "Cursor parallax depth"}},
+    {ver = "2.0.0", date = "Mar 25, 2026", items = {"Premium 3D UI design", "GitHub key system", "Snow particle effects", "Cursor parallax depth"}},
     {ver = "1.5.0", date = "Mar 20, 2026", items = {"Added Abyss support", "Arsenal improvements", "13 game tabs total"}},
     {ver = "1.0.0", date = "Mar 14, 2026", items = {"Initial release", "360+ features", "Key system v1"}},
 }
@@ -1937,25 +1880,14 @@ task.wait(0.3)
 tween(mainFrame, {Position = UDim2.new(0.5, -380, 0.5, -250)}, 0.6, Enum.EasingStyle.Back)
 
 -- ═══════════════════════════════════════════════════════════
--- BUTTON LOGIC (Jnkie SDK)
+-- BUTTON LOGIC
 -- ═══════════════════════════════════════════════════════════
 
--- Get Key → Junkie.get_key_link()
+-- Get Key → Copy Discord invite (keys distributed via Discord)
 getKeyBtn.MouseButton1Click:Connect(function()
-    pcall(function()
-        local SDK = getSDK()
-        SDK.identifier = FREE_PROJECT_ID
-        local provider = FREE_PROVIDERS[math.random(1, #FREE_PROVIDERS)]
-        local link, err = SDK.get_key_link(provider)
-        if link then
-            pcall(function() setclipboard(link) end)
-            statusMsg.Text = "✅ Key link copied! Paste in browser"
-            tween(statusMsg, {TextColor3 = T.Success}, 0.2)
-        else
-            statusMsg.Text = "⏳ Rate limited — wait 5 minutes"
-            tween(statusMsg, {TextColor3 = T.Warning}, 0.2)
-        end
-    end)
+    pcall(function() setclipboard("https://discord.gg/ezunban") end)
+    statusMsg.Text = "✅ Discord invite copied! Get your key there"
+    tween(statusMsg, {TextColor3 = T.Success}, 0.2)
 end)
 
 -- Close buttons
@@ -1974,12 +1906,13 @@ end
 leftClose.MouseButton1Click:Connect(closeUI)
 rightClose.MouseButton1Click:Connect(closeUI)
 
--- Redeem Key → Junkie.check_key()
+
+-- Redeem Key → validate against GitHub key lists
 local isValidating = false
 redeemBtn.MouseButton1Click:Connect(function()
     if isValidating then return end
     local key = keyInput.Text:gsub("%s+", "")
-    
+
     if key == "" then
         statusMsg.Text = "⚠ Please enter a key first"
         tween(statusMsg, {TextColor3 = T.Error}, 0.2)
@@ -1993,7 +1926,7 @@ redeemBtn.MouseButton1Click:Connect(function()
         tween(inputBg, {Position = orig}, 0.08)
         return
     end
-    
+
     isValidating = true
     statusMsg.Text = "⏳ Validating key..."
     tween(statusMsg, {TextColor3 = T.Warning}, 0.2)
@@ -2003,38 +1936,8 @@ redeemBtn.MouseButton1Click:Connect(function()
     end
 
     task.spawn(function()
-        local isValid = false
-        local tier = "none"
-        local errMsg = "Invalid key"
-
-        -- ── 1. CHECK FREE TIER PROJECT ──
-        local SDK = getSDK(key)
-        SDK.identifier = FREE_PROJECT_ID
-        local ok_free, res_free = pcall(function() return SDK.check_key(key) end)
-        
-        if ok_free and res_free and res_free.valid then
-            isValid = true
-            tier = "free"
-        else
-            -- ── 2. CHECK PREMIUM TIER PROJECT ──
-            SDK.identifier = PREMIUM_PROJECT_ID
-            local ok_prem, res_prem = pcall(function() return SDK.check_key(key) end)
-            
-            if ok_prem and res_prem and res_prem.valid then
-                isValid = true
-                tier = "premium"
-            else
-                -- Neither worked
-                if type(res_prem) == "table" then
-                    errMsg = res_prem.error or res_prem.message or "Invalid key"
-                elseif type(res_prem) == "string" then
-                    errMsg = res_prem
-                else
-                    errMsg = "Invalid Key"
-                end
-                if errMsg == "KEY_INVALID" then errMsg = "Invalid Key" end
-            end
-        end
+        local isValid, tier = validateKey(key)
+        local errMsg = "Invalid Key"
 
         local tierColor = T.Success
         local overlayBg = Color3.fromRGB(4, 20, 10)
@@ -2164,16 +2067,10 @@ redeemBtn.MouseButton1Click:Connect(function()
             if Screen then Screen:Destroy() end
             
             -- ═══════════════════════════════════════════════════
-            -- LOAD JNKIE SCRIPT SOURCE (obfuscated)
-            -- SCRIPT_KEY is now set, so Jnkie's wrapper will pass.
-            -- Replace the URL below with YOUR Jnkie loadstring URL
-            -- (the one Jnkie gives you for your Original Source script)
+            -- LOAD SCRIPT SOURCE FROM GITHUB
             -- ═══════════════════════════════════════════════════
-            local JNKIE_SCRIPT_LOADSTRING = "PASTE_YOUR_JNKIE_LOADSTRING_URL_HERE"
-            -- Example: "https://api.jnkie.com/api/v1/luascripts/public/12345/download"
-            
             local loadOk, loadErr = pcall(function()
-                loadstring(game:HttpGet(JNKIE_SCRIPT_LOADSTRING))()
+                loadstring(game:HttpGet(SCRIPT_SOURCE_URL))()
             end)
             if not loadOk then
                 warn("[SnowyHub] Failed to load Script Source: " .. tostring(loadErr))
